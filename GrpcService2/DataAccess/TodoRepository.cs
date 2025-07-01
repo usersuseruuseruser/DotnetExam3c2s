@@ -1,4 +1,5 @@
 ﻿using Cassandra;
+using Cassandra.Mapping;
 using Google.Protobuf.Collections;
 using ISession = Cassandra.ISession;
 
@@ -7,68 +8,42 @@ namespace GrpcService2.DataAccess;
 public class TodoRepository: ITodoRepository
 {
     private readonly ISession _session;
-    private readonly PreparedStatement _psSelectAll;
-    private readonly PreparedStatement _psInsert;
-    private readonly PreparedStatement _psUpdate;
-    private readonly PreparedStatement _psDelete;
+    private readonly IMapper  _mapper; 
 
-    public TodoRepository(ISession session)
+    public TodoRepository(ISession session, IMapper mapper)
     {
         _session     = session;
-
-        _psSelectAll = _session.Prepare(
-            "SELECT id, title, description, done, created_ts FROM todo");
-
-        _psInsert    = _session.Prepare(
-            "INSERT INTO todo (id, title, description, done, created_ts) VALUES (?, ?, ?, ?, ?)");
-
-        _psUpdate    = _session.Prepare(
-            "UPDATE todo SET title = ?, description = ?, done = ? WHERE id = ?");
-
-        _psDelete    = _session.Prepare(
-            "DELETE FROM todo WHERE id = ?");
+        _mapper = mapper;
     }
 
     public async Task<List<TodoItem>> GetAllAsync()
     {
-        var rs   = await _session.ExecuteAsync(_psSelectAll.Bind());
-        var list = new List<TodoItem>();
-
-        foreach (var row in rs)
-        {
-            list.Add(RowToItem(row));
-        }
-        return list;
+        var todos = await _mapper.FetchAsync<TodoItem>();      
+        return todos.ToList();
     }
 
     public async Task<TodoItem> AddAsync(TodoItem item)
     {
-        // генерируем id если не передан, к примеру если клиент хочет сохранить под своим
         var id        = string.IsNullOrEmpty(item.Id) ? Guid.NewGuid().ToString() : item.Id;
-        
-        // когда был создан тоже
         var createdTs = item.CreatedTs == 0
-                        ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                        : item.CreatedTs;
+            ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            : item.CreatedTs;
 
-        await _session.ExecuteAsync(
-            _psInsert.Bind(id, item.Title, item.Description, item.Done, createdTs));
+        item.Id        = id;
+        item.CreatedTs = createdTs;
 
-        item.Id         = id;
-        item.CreatedTs  = createdTs;
+        await _mapper.InsertAsync(item);                         
         return item;
     }
 
     public async Task<TodoItem> UpdateAsync(TodoItem item)
     {
-        await _session.ExecuteAsync(
-            _psUpdate.Bind(item.Title, item.Description, item.Done, item.Id));
-
+        await _mapper.UpdateAsync(item);       
         return item;
     }
 
     public Task DeleteAsync(string id) =>
-        _session.ExecuteAsync(_psDelete.Bind(id));
+        _mapper.DeleteAsync<TodoItem>("WHERE id = ?", id); 
 
     private static TodoItem RowToItem(Row row) => new()
     {
