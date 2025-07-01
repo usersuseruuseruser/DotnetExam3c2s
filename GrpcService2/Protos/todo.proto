@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package todo;
+
+option csharp_namespace = "GrpcService2";
+
+import "google/protobuf/empty.proto";
+
+message TodoItem {
+  string  id          = 1;  
+  string  title       = 2;  
+  string  description = 3;  
+  bool    done        = 4;  
+  int64   created_ts  = 5;  
+}
+
+
+message TodoList {
+  repeated TodoItem items = 1;
+}
+
+
+message ItemId {
+  string id = 1;
+}
+
+service TodoService {
+
+  rpc List   (google.protobuf.Empty) returns (TodoList);
+
+  rpc Add    (TodoItem)              returns (TodoItem);
+
+  rpc Update (TodoItem)              returns (TodoItem);
+
+  rpc Delete (ItemId)                returns (google.protobuf.Empty);
+}

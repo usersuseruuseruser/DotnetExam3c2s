@@ -1,0 +1,46 @@
+﻿services:
+  cassandra:
+    image: cassandra:4.1         
+    container_name: cassandra
+    ports:
+      - "9042:9042"              
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: "grpc_cluster"
+      CASSANDRA_DC: "dc1"
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  server:
+    build:
+      context: .      
+      dockerfile: GrpcService2/Dockerfile
+    container_name: grpc-server
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    environment:
+      CASSANDRA_CONTACT_POINTS: cassandra
+      CASSANDRA_KEYSPACE: grpc_demo
+    ports:
+      - "5000:8080"         
+
+  client:
+    build:
+      context: . 
+      dockerfile: GrpcCLIENT/Dockerfile
+    container_name: grpc-client
+    ports:
+      - "5001:8080"
+    depends_on:
+      - server
+    environment:
+      GRPC_SERVER_ADDRESS: "http://server:8080"
+
+volumes:
+  cassandra-data:
